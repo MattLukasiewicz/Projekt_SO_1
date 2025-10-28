@@ -309,6 +309,70 @@ void Asymetria_Filozofowie(int id) {
         paleczki[lewa].unlock();
     }
 }
+/*
+ * Aby uniknąć zakleszczenia, filozof zawsze podnosi pałeczkę
+ * o niższym numerze ID jako pierwszą, a potem tę o wyższym numerze ID.
+ * Używa blokującej funkcji lock(), co zapobiega zagłodzeniu.
+ */
+void Hierarchia_Filozofowie(int id) {
+    /*
+     * Określenie indeksów potrzebnych pałeczek.
+     */
+    int paleczka1_id = id;
+    int paleczka2_id = (id + 1) % LICZBA_FILOZOFOW;
+
+    /*
+     * Ustalenie hierarchii podnoszenia.
+     * Używamy funkcji min() i max(), aby zawsze wiedzieć, którą podnieść jako pierwszą.
+     */
+    int pierwsza_paleczka_id = min(paleczka1_id, paleczka2_id);
+    int druga_paleczka_id = max(paleczka1_id, paleczka2_id);
+
+    /*
+     * Pętla życia filozofa.
+     */
+    while (symulacjaDziala) {
+        /*
+         * Myślenie.
+         */
+        mysl(id);
+
+        /*
+         * Jest głodny.
+         */
+        ustawStanFilozofa(id, StanFilozofa::GLODNY);
+
+        /*
+         * Podnoszenie pałeczek ZGODNIE Z HIERARCHIĄ.
+         * Zawsze blokujemy najpierw mutex pałeczki o niższym ID.
+         * Funkcja lock() jest blokująca - wątek czeka, jeśli pałeczka jest zajęta.
+         */
+        paleczki[pierwsza_paleczka_id].lock();
+        ustawWlascicielaPaleczki(pierwsza_paleczka_id, id);
+
+        /*Podniesienie drugiej pałeczki (o wyższym ID).
+         * Wątek wciąż trzyma pierwszą pałeczkę.
+         */
+        paleczki[druga_paleczka_id].lock();
+        ustawWlascicielaPaleczki(druga_paleczka_id, id);
+
+        /*Jedzenie.
+         * Filozof ma obie pałeczki.
+         */
+        jedz(id);
+
+        /*
+         *  Odkładanie pałeczek.
+         */
+        ustawWlascicielaPaleczki(druga_paleczka_id, -1);
+        paleczki[druga_paleczka_id].unlock();
+
+        ustawWlascicielaPaleczki(pierwsza_paleczka_id, -1);
+        paleczki[pierwsza_paleczka_id].unlock();
+
+
+    }
+}
 
 
 int main() {
@@ -325,11 +389,12 @@ int main() {
     cout << "  1. Zakleszczenie (naiwna)" << endl;
     cout << "  2. Zaglodzenie (try_lock)" << endl;
     cout << "  3. Poprawna (asymetryczna)" << endl;
+    cout << "  4. Poprawna (hierarchia zasobow)" << endl;
 
     while (true) {
-        cout << "Twoj wybor (1, 2 lub 3): ";
+        cout << "Wybor (1, 2, 3, 4): ";
         cin >> wyborLogiki;
-        if (wyborLogiki >= 1 && wyborLogiki <= 3) {
+        if (wyborLogiki >= 1 && wyborLogiki <= 4) {
             break;
         }
         cout << "Niepoprawny wybor." << endl;
@@ -362,11 +427,18 @@ int main() {
             CZAS_MYSLENIA_MIN_MS = 2000;
             CZAS_MYSLENIA_MAX_MS = 5000;
             break;
+        case 4: //
+            cout << "Tryb 4 (Poprawny - Hierarchia)" << endl;
+            CZAS_JEDZENIA_MIN_MS = 1000;
+            CZAS_JEDZENIA_MAX_MS = 4000;
+            CZAS_MYSLENIA_MIN_MS = 2000;
+            CZAS_MYSLENIA_MAX_MS = 5000;
+            break;
     }
 
 
     cout << "\nUruchamianie symulacji... Nacisnij ENTER, aby zakonczyc." << endl;
-    this_thread::sleep_for(chrono::seconds(2)); // Chwila na przeczytanie
+    this_thread::sleep_for(chrono::seconds(2)); // Chwila na przeczytanie tego co wypluje
 
     //Uruchamianie watkow
     thread watkiFilozofow[LICZBA_FILOZOFOW];
@@ -382,6 +454,9 @@ int main() {
                 break;
             case 3:
                 watkiFilozofow[i] = thread(Asymetria_Filozofowie, i);
+                break;
+            case 4:
+                watkiFilozofow[i] = thread(Hierarchia_Filozofowie, i);
                 break;
         }
     }
