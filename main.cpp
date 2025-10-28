@@ -470,8 +470,8 @@ int main() {
 
         /* Krok 2: Narysuj stan na ekranie ncurses */
         erase(); /* Wyczyść bufor ekranu ncurses */
-        mvprintw(0, 0, "-----------2"
-                       " PROBLEM UCZTUJACYCH FILOZOFOW -----------");
+        mvprintw(0, 0, "----------------- 4"
+                       "PROBLEM UCZTUJACYCH FILOZOFOW ------------------");
         mvprintw(2, 0, "ID"); mvprintw(2, 5, "Filozof"); mvprintw(2, 18, "Stan");
         mvprintw(2, 28, "L. Paleczka"); mvprintw(2, 44, "P. Paleczka"); mvprintw(2, 60, "Zjadl");
 
@@ -486,8 +486,7 @@ int main() {
             if (wlasciciele_kopia[lewa_id] == -1) ss_lewa << "WOLNA";
             else if (wlasciciele_kopia[lewa_id] == i) ss_lewa << "Trzyma";
             else ss_lewa << "Zajeta(" << wlasciciele_kopia[lewa_id] << ")";
-            m4
-            vprintw(y, 28, "%s", ss_lewa.str().c_str());
+            mvprintw(y, 28, "%s", ss_lewa.str().c_str());
 
             int prawa_id = (i + 1) % LICZBA_FILOZOFOW;
             if (wlasciciele_kopia[prawa_id] == -1) ss_prawa << "WOLNA";
