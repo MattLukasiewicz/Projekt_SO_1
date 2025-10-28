@@ -10,9 +10,10 @@
 
 using namespace std;
 
-// --- Konfiguracja Symulacji (ZMODYFIKOWANE) ---
-// Usunęliśmy 'const' i wartości początkowe.
-// Ustawimy je w main() w zależności od wyboru użytkownika.
+
+/*
+ * Deklaruje zmineen żeby móc zmieniać czas dla róznych symulacji ich czas będzie zależał od opcji która wypbierzemy
+ */
 int CZAS_JEDZENIA_MIN_MS;
 int CZAS_JEDZENIA_MAX_MS;
 int CZAS_MYSLENIA_MIN_MS;
@@ -21,22 +22,27 @@ int CZAS_MYSLENIA_MAX_MS;
 const int LICZBA_FILOZOFOW = 5;
 
 
-// --- Pamięć Współdzielona ---
+//Pamięć Współdzielona mutex to klucz do pokoju i tylko jedna osoba może go użyć i wejść tam fajna analogia
+
 mutex paleczki[LICZBA_FILOZOFOW];
 
-enum class StanFilozofa { MYSLI, GLODNY, JE };
-StanFilozofa stanyFilozofow[LICZBA_FILOZOFOW];
-int wlascicielePaleczek[LICZBA_FILOZOFOW];
-string imionaFilozofow[LICZBA_FILOZOFOW] = { "Yoda", "Gandalf", "Platon", "Sokrates", "Konfucjusz" };
+enum class StanFilozofa { MYSLI, GLODNY, JE };//dla ładniejszego odczytu
+StanFilozofa stanyFilozofow[LICZBA_FILOZOFOW];// do wyswietlania
+int wlascicielePaleczek[LICZBA_FILOZOFOW];// do wyswietlania -`1 to wolna paleczka
+string imionaFilozofow[LICZBA_FILOZOFOW] = { "Shrek", "Fiona", "Osioł", "Kot", "Smoczyca" };
 
 atomic<int> licznikPosilkow[LICZBA_FILOZOFOW];
 
-mutex mutexStanu;
+mutex mutexStanu;//żeby przy wyswitalniu czy zapisie nie było oknfliktuu że coś w rtrakcie sie zminia
 atomic<bool> symulacjaDziala{true};
 
 
-// --- Funkcje pomocnicze (bez zmian) ---
+// FUNKCJ POMOCNICZE
 
+
+/*
+ * Losuje czas z zakresu podanego wcześńiej
+ */
 int losujCzas(int min_ms, int max_ms) {
     thread_local mt19937 generator(random_device{}());
     // Jeśli min == max, dystrybucja i tak zwróci tę samą liczbę
@@ -44,31 +50,39 @@ int losujCzas(int min_ms, int max_ms) {
     return dystrybucja(generator);
 }
 
+
+/*
+ * Zmienia na ladny tekst
+ */
 string stanNaString(StanFilozofa stan) {
     switch (stan) {
         case StanFilozofa::MYSLI:   return "MYSLI";
         case StanFilozofa::GLODNY:  return "GLODNY";
         case StanFilozofa::JE:      return "JE";
     }
-    return "???";
+    return "?";
 }
 
+
+// Aktualizuje bezpiecznie stan filozofa
 void ustawStanFilozofa(int id, StanFilozofa stan) {
     lock_guard<mutex> blokada(mutexStanu);
     stanyFilozofow[id] = stan;
 }
-
+// Ustawai kto jest wlasciecielem pałeczki
 void ustawWlascicielaPaleczki(int idPaleczki, int idFilozofa) {
     lock_guard<mutex> blokada(mutexStanu);
     wlascicielePaleczek[idPaleczki] = idFilozofa;
 }
-
+// Symuluje mylsenie z podanego wcześneij zakresu
 void mysl(int id) {
     ustawStanFilozofa(id, StanFilozofa::MYSLI);
     int czasMyslenia = losujCzas(CZAS_MYSLENIA_MIN_MS, CZAS_MYSLENIA_MAX_MS);
     this_thread::sleep_for(chrono::milliseconds(czasMyslenia));
 }
 
+
+//Symuluje jedzenie z czasu wcześneij podanego
 void jedz(int id) {
     ustawStanFilozofa(id, StanFilozofa::JE);
     licznikPosilkow[id]++;
@@ -81,7 +95,7 @@ void jedz(int id) {
 
 void wyswietlStan() {
     while (symulacjaDziala) {
-        cout << "\033[2J\033[H"; // Czyść ekran
+        //cout << "\033[2J\033[H"; // Czyść ekran
         cout << "--- PROBLEM UCZTUJACYCH FILOZOFOW (C++) ---\n" << endl;
 
         {
@@ -112,113 +126,143 @@ void wyswietlStan() {
     }
 }
 
-// --- Logika filozofów (bez zmian) ---
+/*Zaklezczenie wytępuje wtdy gdy wątek czeka na inne zasoby które  zajęte są przez inny wątek i w ten sposób się blokują.
+ * Funkcja przyjmuj id filozofa. Żeby była możłliwość zakleszczenia musza być 4 warunki coffmana z wikipenii
+ *
+ * Wzajemne wykluczanie (Mutual Exclusion): Pałeczka (mutex) może być trzymana tylko przez jednego filozofa naraz. Gwarantuje to mutex::lock().
 
-void logikaFilozofa_Zakleszczenie(int id) {
+Trzymanie i oczekiwanie (Hold and Wait): Filozof trzyma już jedną pałeczkę (paleczki[lewa].lock()) i czeka na drugą (paleczki[prawa].lock()). Nie odkłada pierwszej, jeśli druga jest zajęta. To kluczowe.
+
+Brak wywłaszczania (No Preemption): Pałeczki nie można filozofowi "wyrwać". Może ją zwolnić tylko on sam, dobrowolnie (unlock()), po zakończeniu jedzenia.
+
+Czekanie cykliczne (Circular Wait): To jest właśnie skutek połączenia powyższych warunków z pechową synchronizacją (którą wymuszamy krótkim czasem myślenia i pauzą sleep(100)). Tworzy się zamknięty krąg:
+
+P0 (trzyma P0) czeka na P1 (trzymaną przez P1)
+
+P1 (trzyma P1) czeka na P2 (trzymaną przez P2)
+
+P2 (trzyma P2) czeka na P3 (trzymaną przez P3)
+
+P3 (trzyma P3) czeka na P4 (trzymaną przez P4)
+
+P4 (trzyma P4) czeka na P0 (trzymaną przez P0)
+ */
+void Zakleszczenie_Filozofowie(int id) {
+    //jaką pałeczkę potrzebuje
     int lewa = id;
     int prawa = (id + 1) % LICZBA_FILOZOFOW;
+    //Działanie symulacji dopóki w main nie będzie false czyli przycisk enter
     while (symulacjaDziala) {
+        //ustawaimy myslenie i filozof myśli przez jakis czas
         mysl(id);
+        //filozof jest głodny
         ustawStanFilozofa(id, StanFilozofa::GLODNY);
+        //paleczka leewa jest pobierana pierwsza jeśli to możliwe i blokuuje ja a jesli nie to czeka aż będzie wolna
         paleczki[lewa].lock();
         ustawWlascicielaPaleczki(lewa, id);
-        // To opóźnienie jest kluczowe dla wymuszenia zakleszczenia
-        this_thread::sleep_for(chrono::milliseconds(100));
+        /*sleep dodajemy jesli chcemy żeby ta predkość komputra została zniwelowana czyli cały czs się blokowały bo czas reakcji komputera jest bardzo szybki
+        sleep daje czas innym filozofom żeby też podniesli pierwsza pałeczkę najpeirw
+         */
+        //this_thread::sleep_for(chrono::milliseconds(100));
+        /*
+         * Filozof bierze prawą pałeczkę jeśli ma już lewa i jeśli prawa jst owlna jeśli nie jes wolna to trzyma lewa i czeka aż bezie prawa zwolniona
+         */
         paleczki[prawa].lock();
         ustawWlascicielaPaleczki(prawa, id);
         jedz(id);
+        // oddanie pałeczek
         ustawWlascicielaPaleczki(prawa, -1);
         paleczki[prawa].unlock();
         ustawWlascicielaPaleczki(lewa, -1);
         paleczki[lewa].unlock();
     }
 }
-void logikaFilozofa_Zaglodzenie(int id) {
-    // 1. Ustalenie, które pałeczki są "moje"
+
+/*
+ * Używamy tu try_lock() żeby spróbować podnieść pałeczkę jeśli się nie uuda
+ * to próbuje ponownie  co może powodować że jeden filozof będzie całyc zas
+ * wyprzedzany w podnoszeniu pałeczek przez inych filozofów i bdzie mniej jadł.
+ *
+ */
+
+
+void Zaglodzenie_Filozofowie(int id) {
+    // jakei pałeczki podnosi jak np id =4 to paleczka 4 i 5 mod 5 czyli 0
     int lewa = id;
     int prawa = (id + 1) % LICZBA_FILOZOFOW;
 
-    // 2. Główna pętla życia (działa, dopóki program nie zostanie zatrzymany)
     while (symulacjaDziala) {
 
-        // 3. ETAP MYŚLENIA
-        //    Filozof myśli przez losowy czas (2-5 sekund).
-        //    To ważne, bo "rozsynchronizowuje" filozofów.
+        //  ETAP MYŚLENIA
+        //    Filozof myśli przez losowy czas (2-5 sekund) aby ich rozsynchornizować
         mysl(id);
 
-        // 4. ETAP GŁODU
-        //    Mówi Narratorowi (przez tablicę stanów), że jest głodny.
+        //   Jest głodny
         ustawStanFilozofa(id, StanFilozofa::GLODNY);
 
-        // 5. Ustawienie flagi: "Jeszcze nie zjadłem".
+        // Ustawaimy flagę czy już zjadł czy nie  jeśli nie to cały czas próbuje jesc dopóki zjadł = true albo symulacja się nie skończy
         bool zjadl = false;
 
-        // 6. KRYTYCZNA PĘTLA "SPINOWANIA" (LIVELOCK)
-        //    To jest serce problemu. Pętla ta oznacza:
-        //    "DOPÓKI NIE ZJADŁEM I SYMULACJA DZIAŁA... PRÓBUJ!"
+        /*
+         * Pętla "spinująca"
+         * Serce mechanizmu livelocka. Pętla wykonuje się bardzo szybko ,
+         * dopóki filozofowi nie uda się zjeść (zjadl == true) lub
+         * dopóki symulacja się nie zakończy.
+         */
         while (!zjadl && symulacjaDziala) {
 
-            // 7. PIERWSZA PRÓBA: Sięgnij po lewą pałeczkę
+            // PIERWSZA PRÓBA: Sięgnij po lewą pałeczkę
             //    `try_lock()` to funkcja "Spróbuj zamknąć".
             //    - Jeśli pałeczka jest WOLNA: Zamyka ją i zwraca `true`.
             //    - Jeśli pałeczka jest ZAJĘTA: NIE CZEKA. Zwraca `false`.
             if (paleczki[lewa].try_lock()) {
 
-                // 7a. (Sukces z lewą) Zdobyliśmy lewą! Aktualizujemy tablicę wyników.
                 ustawWlascicielaPaleczki(lewa, id);
 
-                // 8. DRUGA PRÓBA: (Trzymając lewą) Sięgnij po prawą pałeczkę
+                // DRUGA PRÓBA: (Trzymając lewą) Sięgnij po prawą pałeczkę
                 if (paleczki[prawa].try_lock()) {
 
-                    // 8a. (Sukces z prawą) ZDOBYLIŚMY OBIE!
                     ustawWlascicielaPaleczki(prawa, id);
 
-                    // 9. ETAP JEDZENIA
-                    jedz(id); // Je przez losowy czas (i klika licznik)
+                    //  ETAP JEDZENIA jeśli zdobyliśmy obnie pałeczki
+                    jedz(id); // Je przez losowy czas
 
-                    // 10. WYJŚCIE Z PĘTLI
+                    // WYJŚCIE Z PĘTLI
                     //     Ustawia flagę na `true`. Pętla 'while(!zjadl)'
                     //     zakończy się przy następnym sprawdzeniu.
                     zjadl = true;
-
-                    // 11. ODKŁADANIE PAŁECZEK (po jedzeniu)
+                    //odklada paleczki
                     ustawWlascicielaPaleczki(prawa, -1);
                     paleczki[prawa].unlock();
 
                 } else {
-                    // 8b. (Porażka z prawą) Mamy lewą, ale prawa była zajęta.
+                    //  (Porażka z prawą) Mamy lewą, ale prawa była zajęta.
                     //     Nie możemy jeść. Musimy odłożyć lewą.
                     ustawWlascicielaPaleczki(lewa, -1);
                 }
 
-                // 12. ODKŁADANIE LEWEJ
-                //     Ta linia wykonuje się ZAWSZE po kroku 7a:
-                //     - Albo po jedzeniu (krok 11)
-                //     - Albo po porażce z prawą (krok 8b)
+
                 paleczki[lewa].unlock();
             }
 
-            // 13. CO SIĘ DZIEJE PO PORAŻCE? (NAJWAŻNIEJSZE!)
-            //     - Co jeśli porażka była w kroku 7 (lewa była zajęta)?
-            //     - Albo co jeśli porażka była w kroku 8b (prawa była zajęta)?
-            //
-            //     W obu tych przypadkach flaga `zjadl` wciąż jest `false`.
-            //     Nie ma tu żadnej pauzy `sleep_for()`.
-            //     Pętla 'while(!zjadl)' natychmiast się powtarza od kroku 6.
-            //
+
             //     Filozof jest "uparty" - próbuje ponownie NATYCHMIAST.
             //     I znowu. I znowu. Tysiące razy na sekundę.
             //     To jest "spinowanie", które marnuje jego czas procesora.
         }
 
-        // 14. KONIEC CYKLU
-        //     Filozof wydostaje się z pętli 'while(!zjadl)' tylko wtedy,
-        //     gdy udało mu się zjeść (krok 10).
-        //     Teraz wraca na początek pętli życia (krok 2) i idzie myśleć.
+        // KONIEC CYKLU
+        // Filozof wydostaje się z pętli 'while(!zjadl)' tylko wtedy, gdy udało mu się zjeść (krok 10).
+        //Teraz wraca na początek pętli życia (krok 2) i idzie myśleć.
     }
 }
 
-void logikaFilozofa_Poprawna(int id) {
+
+/*
+ * Zeby nie wystapiło zaglodznie ani zakleszczenie wystarczy że zrobimy prostą amianę filozofowie o parzystym indeksie
+ * najpierw próbują wziąć prawą pałeczkę a ci o nieparzystym najpierw po lewą. Używamy też lock czyli czeka aż bęzei wolna nie narnuje procesora i w końcu kiedyś dostanie dostę do pałeczki czyli nie będzie zagłodzneia
+ */
+void Asymetria_Filozofowie(int id) {
     int lewa = id;
     int prawa = (id + 1) % LICZBA_FILOZOFOW;
     while (symulacjaDziala) {
@@ -243,7 +287,6 @@ void logikaFilozofa_Poprawna(int id) {
     }
 }
 
-// --- Funkcja `main` (ZMODYFIKOWANA) ---
 
 int main() {
     // --- Inicjalizacja ---
@@ -277,8 +320,8 @@ int main() {
         case 1:
             // Tryb ZAKLESZCZENIA: krótki, stały czas myślenia
             cout << "Tryb 1 (Zakleszczenie): Ustawiono krótki, staly czas myslenia (100ms), aby wymusic zakleszczenie." << endl;
-            CZAS_MYSLENIA_MIN_MS = 1000;
-            CZAS_MYSLENIA_MAX_MS = 1000;
+            CZAS_MYSLENIA_MIN_MS = 2000;
+            CZAS_MYSLENIA_MAX_MS = 2000;
             CZAS_JEDZENIA_MIN_MS = 2000; // Długi czas, by zakleszczenie było widoczne
             CZAS_JEDZENIA_MAX_MS = 5000;
             break;
@@ -314,13 +357,13 @@ int main() {
     for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
         switch (wyborLogiki) {
             case 1:
-                watkiFilozofow[i] = thread(logikaFilozofa_Zakleszczenie, i);
+                watkiFilozofow[i] = thread(Zakleszczenie_Filozofowie, i);
                 break;
             case 2:
-                watkiFilozofow[i] = thread(logikaFilozofa_Zaglodzenie, i);
+                watkiFilozofow[i] = thread(Zaglodzenie_Filozofowie, i);
                 break;
             case 3:
-                watkiFilozofow[i] = thread(logikaFilozofa_Poprawna, i);
+                watkiFilozofow[i] = thread(Asymetria_Filozofowie, i);
                 break;
         }
     }
