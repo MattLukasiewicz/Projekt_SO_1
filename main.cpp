@@ -7,6 +7,7 @@
 #include <atomic>
 #include <iomanip>
 #include <limits>
+#include <sstream>
 
 using namespace std;
 
@@ -29,7 +30,7 @@ mutex paleczki[LICZBA_FILOZOFOW];
 enum class StanFilozofa { MYSLI, GLODNY, JE };//dla ładniejszego odczytu
 StanFilozofa stanyFilozofow[LICZBA_FILOZOFOW];// do wyswietlania
 int wlascicielePaleczek[LICZBA_FILOZOFOW];// do wyswietlania -`1 to wolna paleczka
-string imionaFilozofow[LICZBA_FILOZOFOW] = { "Shrek", "Fiona", "Osioł", "Kot", "Smoczyca" };
+string imionaFilozofow[LICZBA_FILOZOFOW] = { "Shrek", "Fiona", "Osiol", "Kot", "Smoczyca" };
 
 atomic<int> licznikPosilkow[LICZBA_FILOZOFOW];
 
@@ -91,37 +92,59 @@ void jedz(int id) {
 }
 
 
-// --- Wątek wizualizatora (bez zmian) ---
 
+//WWizualizacja
 void wyswietlStan() {
     while (symulacjaDziala) {
-        //cout << "\033[2J\033[H"; // Czyść ekran
-        cout << "--- PROBLEM UCZTUJACYCH FILOZOFOW (C++) ---\n" << endl;
+        cout << "\n--- Symulcja problem filozofow ---\n";
 
-        {
+        cout << "+----+------------+----------+---------------------+---------------------+-------+" << endl;
+        cout << "| ID | Filozof    | Stan     | Lewa Paleczka (0-4) | Prawa Paleczka (0-4)| Zjadl |" << endl;
+        cout << "+----+------------+----------+---------------------+---------------------+-------+" << endl;
+
+        { // Blok dla lock_guard
             lock_guard<mutex> blokada(mutexStanu);
 
-            cout << "FILOZOFOWIE:" << endl;
             for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
-                cout << "  " << setw(10) << left << imionaFilozofow[i]
-                     << " (" << i << "): "
-                     << setw(7) << left << stanNaString(stanyFilozofow[i])
-                     << " (Zjadl: " << licznikPosilkow[i].load() << ")" << endl;
-            }
+                // ID Filozofa
+                cout << "| " << setw(2) << i << " | ";
 
-            cout << "\nPALECZKI:" << endl;
-            for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
-                cout << "  Paleczka " << i << ": ";
-                if (wlascicielePaleczek[i] == -1) {
-                    cout << "WOLNA" << endl;
+                // Imię Filozofa
+                cout << setw(10) << left << imionaFilozofow[i] << " | ";
+
+                // Stan Filozofa
+                cout << setw(8) << left << stanNaString(stanyFilozofow[i]) << " | ";
+
+                // Lewa Pałeczka
+                int lewa_id = i;
+                stringstream ss_lewa;
+                if (wlascicielePaleczek[lewa_id] == -1) {
+                    ss_lewa << "WOLNA";
+                } else if (wlascicielePaleczek[lewa_id] == i) {
+                    ss_lewa << "Trzyma (" << i << ")";
                 } else {
-                    cout << "Trzymana przez " << imionaFilozofow[wlascicielePaleczek[i]]
-                         << " (" << wlascicielePaleczek[i] << ")" << endl;
+                    ss_lewa << "Zajeta (" << wlascicielePaleczek[lewa_id] << ")";
                 }
-            }
-        }
+                cout << setw(19) << left << ss_lewa.str() << " | ";
 
-        cout << "\nNacisnij ENTER, aby zakonczyc symulacje..." << endl;
+                // Prawa Pałeczka
+                int prawa_id = (i + 1) % LICZBA_FILOZOFOW;
+                stringstream ss_prawa;
+                if (wlascicielePaleczek[prawa_id] == -1) {
+                    ss_prawa << "WOLNA";
+                } else if (wlascicielePaleczek[prawa_id] == i) {
+                    ss_prawa << "Trzyma (" << i << ")";
+                } else {
+                    ss_prawa << "Zajeta (" << wlascicielePaleczek[prawa_id] << ")";
+                }
+                cout << setw(19) << left << ss_prawa.str() << " | ";
+
+                cout << setw(5) << right << licznikPosilkow[i].load() << " |" << endl;
+            }
+        } // mutexStanu jest zwalniany
+
+        cout << "+----+------------+----------+---------------------+---------------------+-------+" << endl;
+        cout << "(Stan co 1 sekunde. Nacisnij ENTER, aby zakonczyc...)" << endl;
         this_thread::sleep_for(chrono::seconds(1));
     }
 }
@@ -193,11 +216,11 @@ void Zaglodzenie_Filozofowie(int id) {
 
     while (symulacjaDziala) {
 
-        //  ETAP MYŚLENIA
+        // ETAP MYŚLENIA
         //    Filozof myśli przez losowy czas (2-5 sekund) aby ich rozsynchornizować
         mysl(id);
 
-        //   Jest głodny
+        //Jest głodny
         ustawStanFilozofa(id, StanFilozofa::GLODNY);
 
         // Ustawaimy flagę czy już zjadł czy nie  jeśli nie to cały czas próbuje jesc dopóki zjadł = true albo symulacja się nie skończy
@@ -246,8 +269,8 @@ void Zaglodzenie_Filozofowie(int id) {
             }
 
 
-            //     Filozof jest "uparty" - próbuje ponownie NATYCHMIAST.
-            //     I znowu. I znowu. Tysiące razy na sekundę.
+            //Filozof jest "uparty" - próbuje ponownie NATYCHMIAST.
+            //I znowu. I znowu. Tysiące razy na sekundę.
             //     To jest "spinowanie", które marnuje jego czas procesora.
         }
 
@@ -289,14 +312,14 @@ void Asymetria_Filozofowie(int id) {
 
 
 int main() {
-    // --- Inicjalizacja ---
+    //Inicjalizacja
     for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
         stanyFilozofow[i] = StanFilozofa::MYSLI;
         wlascicielePaleczek[i] = -1;
         licznikPosilkow[i].store(0);
     }
 
-    // --- Menu wyboru logiki ---
+    //Wybor logiki
     int wyborLogiki = 0;
     cout << "Wybierz logike dzialania filozofow:" << endl;
     cout << "  1. Zakleszczenie (naiwna)" << endl;
@@ -314,21 +337,18 @@ int main() {
         cin.ignore(numeric_limits<streamsize>::max(), '\n');
     }
 
-    // --- DODANO: Automatyczne ustawianie czasów ---
-
+    //Ustawainie czasow w zaleznosci od trybu
     switch (wyborLogiki) {
         case 1:
-            // Tryb ZAKLESZCZENIA: krótki, stały czas myślenia
-            cout << "Tryb 1 (Zakleszczenie): Ustawiono krótki, staly czas myslenia (100ms), aby wymusic zakleszczenie." << endl;
+            cout << "Tryb 1 (Zakleszczenie)" << endl;
             CZAS_MYSLENIA_MIN_MS = 2000;
             CZAS_MYSLENIA_MAX_MS = 2000;
-            CZAS_JEDZENIA_MIN_MS = 2000; // Długi czas, by zakleszczenie było widoczne
+            CZAS_JEDZENIA_MIN_MS = 2000;
             CZAS_JEDZENIA_MAX_MS = 5000;
             break;
 
         case 2:
-            // Tryb ZAGŁODZENIA: normalne, losowe czasy
-            cout << "Tryb 2 (Zaglodzenie): Ustawiono normalne, losowe czasy. Obserwuj liczniki przez dluzszy czas." << endl;
+            cout << "Tryb 2 (Zaglodzenie)" << endl;
             CZAS_JEDZENIA_MIN_MS = 1000;
             CZAS_JEDZENIA_MAX_MS = 4000;
             CZAS_MYSLENIA_MIN_MS = 2000;
@@ -336,8 +356,7 @@ int main() {
             break;
 
         case 3:
-            // Tryb POPRAWNY: normalne, losowe czasy (do porównania z trybem 2)
-            cout << "Tryb 3 (Poprawny): Ustawiono normalne, losowe czasy. Obserwuj liczniki przez dluzszy czas." << endl;
+            cout << "Tryb 3 (Poprawny)" << endl;
             CZAS_JEDZENIA_MIN_MS = 1000;
             CZAS_JEDZENIA_MAX_MS = 4000;
             CZAS_MYSLENIA_MIN_MS = 2000;
@@ -349,8 +368,7 @@ int main() {
     cout << "\nUruchamianie symulacji... Nacisnij ENTER, aby zakonczyc." << endl;
     this_thread::sleep_for(chrono::seconds(2)); // Chwila na przeczytanie
 
-    // --- Uruchomienie wątków ---
-
+    //Uruchamianie watkow
     thread watkiFilozofow[LICZBA_FILOZOFOW];
     thread watekWyswietlajacy(wyswietlStan);
 
@@ -367,14 +385,12 @@ int main() {
                 break;
         }
     }
-
-    // --- Oczekiwanie na zakończenie ---
+    //Oczekuje na zakonczenie
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
     cin.get();
 
     symulacjaDziala = false;
-
-    // --- Sprzątanie ---
+    //Koncowy etap symulacji zakanczanie
     cout << "Zatrzymywanie symulacji, prosze czekac..." << endl;
 
     watekWyswietlajacy.join();
@@ -385,7 +401,7 @@ int main() {
 
     cout << "Symulacja zakonczona." << endl;
 
-    // --- Podsumowanie końcowe ---
+    //Podsumowanie wynikow
     cout << "\n--- OSTATECZNE PODSUMOWANIE POSILKOW ---" << endl;
     for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
         cout << "  " << setw(10) << left << imionaFilozofow[i]
