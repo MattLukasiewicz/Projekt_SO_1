@@ -28,21 +28,20 @@ int CZAS_MYSLENIA_MAX_MS;
 const int LICZBA_FILOZOFOW = 5;
 
 
-/* --- Pamięć Współdzielona --- */
-/*
+/* Pamięć Współdzielona
  * Tablica muteksów reprezentujących pałeczki. Każdy mutex to "zamek",
  * który może być zablokowany tylko przez jeden wątek (filozofa) naraz.
  * Dostęp do pałeczki[i] chroni i-tą pałeczkę.
  */
 mutex paleczki[LICZBA_FILOZOFOW];
 
-/* Typ wyliczeniowy (enum class) definiujący możliwe stany filozofa. Poprawia czytelność. */
+// Typ wyliczeniowy (enum class) definiujący możliwe stany filozofa.
 enum class StanFilozofa { MYSLI, GLODNY, JE };
-/* Tablica przechowująca aktualny stan każdego filozofa. Używana do wyświetlania. */
+// Tablica przechowująca aktualny stan każdego filozofa. Używam do wyswietlania
 StanFilozofa stanyFilozofow[LICZBA_FILOZOFOW];
-/* Tablica przechowująca ID filozofa, który trzyma daną pałeczkę (-1 = wolna). Używana do wyświetlania. */
+// Tablica przechowująca ID filozofa, który trzyma daną pałeczkę (-1 = wolna).
 int wlascicielePaleczek[LICZBA_FILOZOFOW];
-/* Tablica przechowująca imiona filozofów. */
+// Tablica przechowująca imiona filozofów.
 string imionaFilozofow[LICZBA_FILOZOFOW] = { "Shrek", "Fiona", "Osiol", "Kot", "Smoczyca" };
 
 /*
@@ -66,17 +65,17 @@ mutex mutexStanu;
 atomic<bool> symulacjaDziala{true};
 
 
-/* --- FUNKCJE POMOCNICZE --- */
+//FUNKCJE POMOCNICZE
 
 
 /*
  * Losuje czas z zakresu podanego wcześńiej
  */
 int losujCzas(int min_ms, int max_ms) {
-    /* `thread_local` tworzy oddzielną instancję generatora dla każdego wątku. */
-    thread_local mt19937 generator(random_device{}()); /* Ziarno inicjalizowane losowo przy pierwszym wywołaniu w danym wątku. */
-    uniform_int_distribution<int> dystrybucja(min_ms, max_ms); /* Równomierny rozkład w zakresie. */
-    return dystrybucja(generator); /* Zwraca kolejną liczbę z sekwencji generatora. */
+    // `thread_local` tworzy oddzielną instancję generatora dla każdego wątku.
+    thread_local mt19937 generator(random_device{}()); // Ziarno inicjalizowane losowo przy pierwszym wywołaniu w danym wątku.
+    uniform_int_distribution<int> dystrybucja(min_ms, max_ms); // Równomierny rozkład w zakresie.
+    return dystrybucja(generator); // Zwraca kolejną liczbę z sekwencji generatora.
 }
 
 
@@ -96,10 +95,10 @@ string stanNaString(StanFilozofa stan) {
 // Aktualizuje bezpiecznie stan filozofa
 
 void ustawStanFilozofa(int id, StanFilozofa stan) {
-    /* `lock_guard` blokuje `mutexStanu` przy tworzeniu obiektu `blokada`. */
+    // `lock_guard` blokuje `mutexStanu` przy tworzeniu obiektu `blokada`.
     lock_guard<mutex> blokada(mutexStanu);
     stanyFilozofow[id] = stan;
-    /* `mutexStanu` jest automatycznie odblokowywany, gdy `blokada` wychodzi poza zakres (koniec funkcji). */
+    // `mutexStanu` jest automatycznie odblokowywany, gdy `blokada` wychodzi poza zakres (koniec funkcji).
 }
 // Ustawai kto jest wlasciecielem pałeczki
 
@@ -154,7 +153,7 @@ void Zakleszczenie_Filozofowie(int id) {
     //jaką pałeczkę potrzebuje
     int lewa = id;
     int prawa = (id + 1) % LICZBA_FILOZOFOW;
-    //Działanie symulacji dopóki w main nie będzie false czyli przycisk enter
+    //Działanie symulacji dopóki w main nie będzie false czyli przycisk q
     while (symulacjaDziala) {
         //ustawaimy myslenie i filozof myśli przez jakis czas
         mysl(id);
@@ -190,7 +189,7 @@ void Zakleszczenie_Filozofowie(int id) {
 
 
 /*
- * Używamy tu try_lock() żeby spróbować podnieść pałeczkę jeśli się nie uuda
+ *  W zagłodzeniu używam try_lock() żeby spróbować podnieść pałeczkę jeśli się nie uuda
  * to próbuje ponownie  co może powodować że jeden filozof będzie całyc zas
  * wyprzedzany w podnoszeniu pałeczek przez inych filozofów i bdzie mniej jadł.
  *
@@ -205,7 +204,7 @@ void Zaglodzenie_Filozofowie(int id) {
     while (symulacjaDziala) {
 
         // ETAP MYŚLENIA
-        //    Filozof myśli przez losowy czas (2-5 sekund) aby ich rozsynchornizować
+        //    Filozof myśli przez losowy czas (2-5 sekund) żeby ich rozsynchornizować
         mysl(id);
 
         //Jest głodny
@@ -215,8 +214,8 @@ void Zaglodzenie_Filozofowie(int id) {
         bool zjadl = false;
 
         /*
-         * Pętla "spinująca"
-         * Serce mechanizmu livelocka. Pętla wykonuje się bardzo szybko ,
+         * Pętla "spinująca".
+         * Pętla wykonuje się bardzo szybko
          * dopóki filozofowi nie uda się zjeść (zjadl == true) lub
          * dopóki symulacja się nie zakończy.
          */
@@ -257,9 +256,10 @@ void Zaglodzenie_Filozofowie(int id) {
             }
 
 
-            //Filozof jest "uparty" - próbuje ponownie NATYCHMIAST.
-            //I znowu. I znowu. Tysiące razy na sekundę.
-            //     To jest "spinowanie", które marnuje jego czas procesora.
+            /*Filozof jest "uparty" próbuje ponownie od frazu.
+             * I znowu. I znowu. Tysiące razy na sekundę.
+            To jest "spinowanie", które marnuje jego czas procesora.
+             */
         }
 
         // KONIEC CYKLU
@@ -298,7 +298,7 @@ void Asymetria_Filozofowie(int id) {
     }
 }
 /*
- * Aby uniknąć zakleszczenia, filozof zawsze podnosi pałeczkę
+ * metoda Hierwarchii żeby uniknąć zakleszczenia, filozof zawsze podnosi pałeczkę
  * o niższym numerze ID jako pierwszą, a potem tę o wyższym numerze ID.
  * Używa blokującej funkcji lock(), co zapobiega zagłodzeniu.
  */
@@ -320,14 +320,14 @@ void Hierarchia_Filozofowie(int id) {
      * Pętla życia filozofa.
      */
     while (symulacjaDziala) {
-        /*
-         * Myślenie.
-         */
+
+         //Myślenie.
+
         mysl(id);
 
-        /*
-         * Jest głodny.
-         */
+
+         //Jest głodny.
+
         ustawStanFilozofa(id, StanFilozofa::GLODNY);
 
         /*
@@ -395,14 +395,14 @@ int main() {
     nodelay(stdscr, TRUE);  // Funkcja getch() nie będzie czekać na klawisz (tryb nieblokujący)
     curs_set(0);            // Ukryj kursor terminala
 
-    /* Inicjalizacja stanów początkowych filozofów i pałeczek oraz liczników */
+    // Inicjalizacja stanów początkowych filozofów i pałeczek oraz liczników
     for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
         stanyFilozofow[i] = StanFilozofa::MYSLI; // Wszyscy zaczynają myśleć
         wlascicielePaleczek[i] = -1; // Wszystkie pałeczki są wolne
         licznikPosilkow[i].store(0); // Wyzeruj atomowe liczniki
     }
 
-    /* Ustawianie zakresów czasu w zależności od wybranego trybu */
+    // Ustawienie zakresów czasu w zależności od wybranego trybu
     switch (wyborLogiki) {
         case 1:
             cout << "Tryb 1 (Zakleszczenie)" << endl;
@@ -436,11 +436,11 @@ int main() {
             break;
     }
 
-    /* Uruchamianie 5 wątków filozofów */
+    // Uruchamianie 5 wątków filozofów
     thread watkiFilozofow[LICZBA_FILOZOFOW];
 
     for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
-        /* Wybierz funkcję logiki na podstawie wyboru użytkownika */
+        // Wybierz funkcję logiki na podstawie wyboru użytkownika
         switch (wyborLogiki) {
             case 1: watkiFilozofow[i] = thread(Zakleszczenie_Filozofowie, i); break;
             case 2: watkiFilozofow[i] = thread(Zaglodzenie_Filozofowie, i); break;
@@ -449,16 +449,16 @@ int main() {
         }
     }
 
-    /* --- Główna pętla programu (rysowanie stanu i obsługa wejścia w main)
-     Zmienne lokalne do przechowywania kopii stanu
+    /* Główna pętla programu (rysowanie stanu i obsługa wejścia w main)
+     * Zmienne lokalne do przechowywania kopii stanu
+     * Pętla działa dopóki użytkownik nie naciśnie 'q'
      */
     vector<StanFilozofa> stany_kopia(LICZBA_FILOZOFOW);
     vector<int> liczniki_kopia(LICZBA_FILOZOFOW);
     vector<int> wlasciciele_kopia(LICZBA_FILOZOFOW);
 
-    /* Pętla działa dopóki użytkownik nie naciśnie 'q' */
     while (symulacjaDziala) {
-        /* Krok 1: Skopiuj aktualny stan globalny do zmiennych lokalnych (pod muteksem) */
+        /* Kopiuje aktualny stan globalny do zmiennych lokalnych (pod muteksem) */
         {
             lock_guard<mutex> blokada(mutexStanu);
             for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
@@ -468,10 +468,9 @@ int main() {
             }
         }
 
-        /* Krok 2: Narysuj stan na ekranie ncurses */
+        /* Rysuje stan na ekranie ncurses */
         erase(); /* Wyczyść bufor ekranu ncurses */
-        mvprintw(0, 0, "----------------- 4"
-                       "PROBLEM UCZTUJACYCH FILOZOFOW ------------------");
+        mvprintw(0, 0, "-----------------PROBLEM UCZTUJACYCH FILOZOFOW ------------------");
         mvprintw(2, 0, "ID"); mvprintw(2, 5, "Filozof"); mvprintw(2, 18, "Stan");
         mvprintw(2, 28, "L. Paleczka"); mvprintw(2, 44, "P. Paleczka"); mvprintw(2, 60, "Zjadl");
 
@@ -498,10 +497,10 @@ int main() {
         }
         mvprintw(LINES - 1, 0, "Nacisnij 'q' aby zakonczyc...");
 
-        /* Krok 3: Sprawdź klawiaturę */
-        int ch = getch(); /* Odczytaj znak z klawiatury (nie czeka) */
+        /* Sprawdzam klawiaturę */
+        int ch = getch();
 
-        // Tymczasowo pokaż, co odczytał getch() (jeśli nie ERR)
+        // Tymczasowo pokazuje, co odczytał getch() (jeśli nie ERR)
         if (ch != ERR) {
             mvprintw(LINES - 2, 0, "Odczytano klawisz: %d ('%c')", ch, ch);
         } else {
@@ -513,13 +512,13 @@ int main() {
             symulacjaDziala = false; /* Ustaw flagę zakończenia */
         }
 
-        /* Krok 4: Pokaż wszystko na ekranie */
-        refresh(); /* Aktualizuj fizyczny ekran terminala */
+        //POkazuje wszystko na ekranie Aktualizuj fizyczny ekran terminala
+        refresh();
 
-        /* Krok 5: Zaczekaj chwilę przed następnym odświeżeniem */
+        /* Czekam przed następnym odświeżeniem */
         napms(100);
 
-    } /* Koniec głównej pętli while(symulacjaDziala) */
+    } /* Koniec głównej pętli działania symulacji */
 
 
     /* Czekanie, aż wszystkie wątki filozofów zakończą swoją pracę */
@@ -527,13 +526,13 @@ int main() {
         watkiFilozofow[i].join();
     }
 
-    /* Zakończenie pracy z biblioteką ncurses i przywrócenie normalnego terminala */
-    curs_set(1);            // Pokaż z powrotem kursor
-    nocbreak();             // Wyłącz tryb cbreak
-    echo();                 // Włącz z powrotem echo (wyświetlanie wciskanych klawiszy)
-    endwin();               // Zakończ tryb ncurses
+    // Zakończenie pracy z biblioteką ncurses i przywrócenie normalnego terminala
+    curs_set(1);            //Pokaż z powrotem kursor
+    nocbreak();             //Wyłącz tryb cbreak
+    echo();                 //Włącz z powrotem echo (wyświetlanie wciskanych klawiszy)
+    endwin();               //Zakończ tryb ncurses
 
-    /* Wyświetlenie podsumowania w standardowej konsoli (po zamknięciu ncurses) */
+    // Wyświetlenie podsumowania w standardowej konsoli po zamknięciu już ncurses
     cout << "Symulacja zakonczona." << endl;
     cout << "\n--- OSTATECZNE PODSUMOWANIE POSILKOW ---" << endl;
     for (int i = 0; i < LICZBA_FILOZOFOW; ++i) {
